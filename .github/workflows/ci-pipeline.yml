@@ -1,0 +1,44 @@
+name: CI - Build & Test
+
+# Trigger: Run this pipeline when we push to the 'main' branch
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Checkout the code from my repository
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # 2. Setup the .NET Environment (The clean "Task" way)
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '6.0.x'
+
+      # 3. Restore Dependencies (Downloading packages)
+      # NOTICE: We point specifically to my "dotnet-app" folder
+      - name: Restore Dependencies
+        run: dotnet restore ./dotnet-app/DotNetWebApp.csproj
+
+      # 4. Build the Application
+      # We build in "Release" mode so it's optimized for production
+      - name: Build Application
+        run: dotnet build ./dotnet-app/DotNetWebApp.csproj --configuration Release --no-restore
+
+      # 5. Publish (Package the app into a zip file for deployment)
+      - name: Publish App
+        run: dotnet publish ./dotnet-app/DotNetWebApp.csproj -c Release -o ./publish
+
+      # 6. Upload Artifact
+      # We save the packaged app so Stage 3 (Deployment) can pick it up later
+      - name: Upload Web App Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: webapp-artifact
+          path: ./publish
