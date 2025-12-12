@@ -1,0 +1,91 @@
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CREDENTIALS_CLIENT_ID }} # We will fix secrets logic below
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_CREDENTIALS_TENANT_ID }}
+  # Terraform variables
+  TF_VAR_resource_group_name: "rg-pratik-learning-dev"
+
+jobs:
+  terraform-plan:
+    name: "Terraform Plan"
+    runs-on: ubuntu-latest
+    env:
+      # A trick to parse the JSON secret we saved earlier
+      AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.5.0
+
+    - name: Log in to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Terraform Init
+      run: |
+        cd terraform
+        terraform init
+
+    - name: Terraform Plan
+      run: |
+        cd terraform
+        terraform plan -out=tfplan
+
+    - name: Upload Plan
+      uses: actions/upload-artifact@v4
+      with:
+        name: tfplan
+        path: terraform/tfplan
+
+  terraform-apply:
+    name: "Terraform Apply"
+    needs: terraform-plan
+    runs-on: ubuntu-latest
+    environment: Production # <--- This triggers the Approval Gate!
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Download Plan
+      uses: actions/download-artifact@v4
+      with:
+        name: tfplan
+        path: terraform
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.5.0
+
+    - name: Log in to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Terraform Init
+      run: |
+        cd terraform
+        terraform init
+
+    - name: Terraform Apply
+      run: |
+        cd terraform
+        terraform apply -auto-approve tfplan
